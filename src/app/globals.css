@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+body {
+  font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: #0b0f19;
+  color: #f1f5f9;
+}
+
+.mono {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(400%); }
+}
+
+.scan-bar {
+  animation: scanline 0.7s ease-in-out infinite;
+}
+
+@keyframes eqBounce {
+  0%, 100% { height: 25%; }
+  50% { height: 95%; }
+}
+
+.eq-bar-1 { animation: eqBounce 0.55s ease-in-out infinite; }
+.eq-bar-2 { animation: eqBounce 0.42s ease-in-out infinite 0.12s; }
+.eq-bar-3 { animation: eqBounce 0.63s ease-in-out infinite 0.24s; }
+.eq-bar-4 { animation: eqBounce 0.48s ease-in-out infinite 0.08s; }
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 9999px;
+}
