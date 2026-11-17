@@ -96,7 +96,7 @@ export async function fetchYouTubeShortMetadata(
   if (apiKey) {
     const endpoint = `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=${encodeURIComponent(videoId)}&key=${encodeURIComponent(apiKey)}`;
     const [resp, autoCaptions] = await Promise.all([
-      fetch(endpoint, { cache: 'no-store' }),
+      fetch(endpoint, { signal: AbortSignal.timeout(4000), cache: 'no-store' }),
       captionsPromise
     ]);
 
@@ -149,7 +149,7 @@ export async function fetchYouTubeShortMetadata(
   // 2. Zero-key YouTube oEmbed + public caption fallback
   const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(canonicalUrl)}&format=json`;
   const [oembedResp, autoCaptions] = await Promise.all([
-    fetch(oembedUrl, { cache: 'no-store' }),
+    fetch(oembedUrl, { signal: AbortSignal.timeout(4000), cache: 'no-store' }),
     captionsPromise
   ]);
 

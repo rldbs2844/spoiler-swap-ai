@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "tsc --outDir /tmp/spoiler-swap-test --module commonjs --moduleResolution node --target ES2022 --esModuleInterop --skipLibCheck --strict tests/detector.test.ts src/lib/constants.ts src/lib/detector.ts src/lib/types.ts src/lib/youtube.ts && node --test /tmp/spoiler-swap-test/tests/detector.test.js"
+    "test": "tsc --outDir /tmp/spoiler-swap-test --module commonjs --moduleResolution node --target ES2022 --esModuleInterop --skipLibCheck --strict tests/detector.test.ts tests/ai-stage4.test.ts src/lib/constants.ts src/lib/detector.ts src/lib/ai-stage4.ts src/lib/types.ts src/lib/youtube.ts && node --test /tmp/spoiler-swap-test/tests/detector.test.js /tmp/spoiler-swap-test/tests/ai-stage4.test.js"
   },
   "engines": {
     "node": ">=20.0.0"

@@ -44,13 +44,13 @@ export default function StageBreakdown({ result, onCopyJson }: StageBreakdownPro
       key: 'S4',
       name: 'Stage 4 · KG + AI 문맥 융합',
       desc:
-        result.ai_analysis?.provider === 'gemini-2.5-flash'
-          ? 'Gemini 2.5 Flash 멀티모달 결합'
-          : result.ai_analysis?.provider === 'gemini-2.0-flash'
-            ? 'Gemini 2.0 Flash 멀티모달 결합'
-            : result.ai_analysis?.provider === 'gpt-4o-mini'
-              ? 'OpenAI GPT-4o-mini 문맥 결합'
-              : 'Knowledge Graph + KoELECTRA 가중치',
+        result.ai_analysis?.provider?.includes('gemini')
+          ? result.ai_analysis.multimodal_used
+            ? `${result.ai_analysis.provider} 멀티모달 결합`
+            : `${result.ai_analysis.provider} 문맥 AI 결합`
+          : result.ai_analysis?.provider === 'gpt-4o-mini'
+            ? 'OpenAI GPT-4o-mini 문맥 결합'
+            : 'Knowledge Graph + KoELECTRA 가중치',
       score: result.stages.stage4_kg_koelectra.score,
       ms: result.stages.stage4_kg_koelectra.latency_ms,
       tags: []
@@ -113,6 +113,11 @@ export default function StageBreakdown({ result, onCopyJson }: StageBreakdownPro
               {ai.multimodal_used && (
                 <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px]">
                   썸네일 이미지 분석 포함
+                </span>
+              )}
+              {ai.fallbackReason && (
+                <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] mono">
+                  {ai.fallbackReason}
                 </span>
               )}
             </span>

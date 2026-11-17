@@ -90,6 +90,8 @@ export default function SpoilerSwapApp() {
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeRunSeqRef = useRef(0);
+  const lastRecordedResultByRunRef = useRef<Map<number, EvaluationResult>>(new Map());
 
   const activeShort: ShortItem = useMemo(() => {
     if (mode === 'search' && selectedSearchShort) return selectedSearchShort;
@@ -167,24 +169,49 @@ export default function SpoilerSwapApp() {
     stopAllAudio();
   }, [stopAllAudio]);
 
-  const recordLog = useCallback((shortItem: ShortItem, result: EvaluationResult) => {
-    const isSwap = result.action === 'SWAP_TO_CAT_MEME';
-    setStats((prev) => ({
-      scanned: prev.scanned + 1,
-      blocked: prev.blocked + (isSwap ? 1 : 0),
-      totalLatency: prev.totalLatency + result.latency_ms,
-      carbonSaved: Number((prev.carbonSaved + result.esg_on_device_carbon_saved_g).toFixed(2))
-    }));
-    setLogs((prev) => {
-      const entry: ScanLogEntry = {
-        seq: prev.length + 1,
-        timestamp: new Date().toLocaleTimeString('ko-KR', { hour12: false }),
-        isoTime: new Date().toISOString(),
-        title: shortItem.title,
-        result
-      };
-      return [entry, ...prev].slice(0, 50);
-    });
+  const recordLog = useCallback(
+    (shortItem: ShortItem, result: EvaluationResult, runId?: number) => {
+      if (typeof runId === 'number') {
+        lastRecordedResultByRunRef.current.set(runId, result);
+      }
+      const isSwap = result.action === 'SWAP_TO_CAT_MEME';
+      setStats((prev) => ({
+        scanned: prev.scanned + 1,
+        blocked: prev.blocked + (isSwap ? 1 : 0),
+        totalLatency: prev.totalLatency + result.latency_ms,
+        carbonSaved: Number((prev.carbonSaved + result.esg_on_device_carbon_saved_g).toFixed(2))
+      }));
+      setLogs((prev) => {
+        const entry: ScanLogEntry = {
+          seq: prev.length + 1,
+          runId,
+          timestamp: new Date().toLocaleTimeString('ko-KR', { hour12: false }),
+          isoTime: new Date().toISOString(),
+          title: shortItem.title,
+          result
+        };
+        return [entry, ...prev].slice(0, 50);
+      });
+    },
+    []
+  );
+
+  const updateLogByRunId = useCallback((runId: number, nextResult: EvaluationResult) => {
+    const prevResult = lastRecordedResultByRunRef.current.get(runId);
+    if (!prevResult) return;
+    lastRecordedResultByRunRef.current.set(runId, nextResult);
+
+    const oldSwap = prevResult.action === 'SWAP_TO_CAT_MEME' ? 1 : 0;
+    const newSwap = nextResult.action === 'SWAP_TO_CAT_MEME' ? 1 : 0;
+    const latencyDelta = nextResult.latency_ms - prevResult.latency_ms;
+    if (oldSwap !== newSwap || latencyDelta !== 0) {
+      setStats((s) => ({
+        ...s,
+        blocked: Math.max(0, s.blocked + (newSwap - oldSwap)),
+        totalLatency: Math.max(0, s.totalLatency + latencyDelta)
+      }));
+    }
+    setLogs((prev) => prev.map((e) => (e.runId === runId ? { ...e, result: nextResult } : e)));
   }, []);
 
   const runShortSequence = useCallback(
@@ -197,6 +224,7 @@ export default function SpoilerSwapApp() {
     ) => {
       clearPlaybackTimers();
       setIsScanningFlash(false);
+      const runSeq = ++activeRunSeqRef.current;
 
       const forced = overrideForceOriginal ?? forceOriginal;
       const baseLocal = evaluateShort(shortItem, { watchlist, threshold });
@@ -225,6 +253,7 @@ export default function SpoilerSwapApp() {
       }
 
       let apiResolvedResult: EvaluationResult = localResult;
+      let timerAlreadyFired = false;
       if (!precomputedResult) {
         fetch('/api/evaluate', {
           method: 'POST',
@@ -233,8 +262,16 @@ export default function SpoilerSwapApp() {
         })
           .then((r) => (r.ok ? r.json() : null))
           .then((data: EvaluationResult | null) => {
+            if (activeRunSeqRef.current !== runSeq) return;
             if (data && data.video_id === shortItem.id) {
               apiResolvedResult = data;
+              setActiveResult(data);
+              if (timerAlreadyFired) {
+                updateLogByRunId(runSeq, data);
+                if (!forced) {
+                  setIsSwappedView(data.action === 'SWAP_TO_CAT_MEME');
+                }
+              }
             }
           })
           .catch(() => {});
@@ -256,9 +293,10 @@ export default function SpoilerSwapApp() {
 
       timersRef.current.push(
         setTimeout(() => {
+          timerAlreadyFired = true;
           const finalDecision = apiResolvedResult || localResult;
           setActiveResult(finalDecision);
-          recordLog(shortItem, finalDecision);
+          recordLog(shortItem, finalDecision, runSeq);
 
           if (finalDecision.action === 'SWAP_TO_CAT_MEME' && !forced) {
             stopAllAudio();
@@ -290,13 +328,14 @@ export default function SpoilerSwapApp() {
       threshold,
       speakKorean,
       recordLog,
+      updateLogByRunId,
       stopAllAudio,
       playSwapChime
     ]
   );
 
   useEffect(() => {
-    fetch('/api/health')
+    fetch('/api/health', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d?.capabilities) setApiCapabilities(d.capabilities);
@@ -321,6 +360,37 @@ export default function SpoilerSwapApp() {
     return () => clearInterval(id);
   }, [autoPlay, mode, runShortSequence]);
 
+  const reevaluateWithUpdatedWatchlist = useCallback(
+    (nextWatchlist: string[]) => {
+      const seq = ++activeRunSeqRef.current;
+      const base = evaluateShort(activeShort, { watchlist: nextWatchlist, threshold });
+      const localUpdated: EvaluationResult = {
+        ...base,
+        ai_analysis: buildOnDeviceReasoning(base)
+      };
+      setActiveResult(localUpdated);
+      setIsSwappedView(localUpdated.action === 'SWAP_TO_CAT_MEME' && !forceOriginal);
+
+      if (apiCapabilities?.gemini_stage4 || apiCapabilities?.openai_stage4) {
+        fetch('/api/evaluate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ shortItem: activeShort, watchlist: nextWatchlist, threshold })
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((data: EvaluationResult | null) => {
+            if (activeRunSeqRef.current !== seq) return;
+            if (data && data.video_id === activeShort.id) {
+              setActiveResult(data);
+              setIsSwappedView(data.action === 'SWAP_TO_CAT_MEME' && !forceOriginal);
+            }
+          })
+          .catch(() => {});
+      }
+    },
+    [activeShort, threshold, forceOriginal, apiCapabilities]
+  );
+
   const handleAddKeyword = (e: React.FormEvent) => {
     e.preventDefault();
     const val = keywordInput.trim();
@@ -328,10 +398,7 @@ export default function SpoilerSwapApp() {
     if (!watchlist.includes(val)) {
       const next = [...watchlist, val];
       setWatchlist(next);
-      const base = evaluateShort(activeShort, { watchlist: next, threshold });
-      const updated = { ...base, ai_analysis: buildOnDeviceReasoning(base) };
-      setActiveResult(updated);
-      setIsSwappedView(updated.action === 'SWAP_TO_CAT_MEME' && !forceOriginal);
+      reevaluateWithUpdatedWatchlist(next);
       showToast(`"${val}" 키워드가 워치리스트에 추가되었습니다.`);
     }
     setKeywordInput('');
@@ -340,14 +407,33 @@ export default function SpoilerSwapApp() {
   const handleRemoveKeyword = (kw: string) => {
     const next = watchlist.filter((item) => item !== kw);
     setWatchlist(next);
-    const base = evaluateShort(activeShort, { watchlist: next, threshold });
-    const updated = { ...base, ai_analysis: buildOnDeviceReasoning(base) };
-    setActiveResult(updated);
-    setIsSwappedView(updated.action === 'SWAP_TO_CAT_MEME' && !forceOriginal);
+    reevaluateWithUpdatedWatchlist(next);
   };
 
   const handleThresholdChange = (nextVal: number) => {
     setThreshold(nextVal);
+    if (
+      activeResult.ai_analysis &&
+      activeResult.ai_analysis.provider !== 'on-device-kg'
+    ) {
+      const isSpoiler = activeResult.confidence_score >= nextVal;
+      const updated: EvaluationResult = {
+        ...activeResult,
+        threshold: nextVal,
+        action: isSpoiler ? 'SWAP_TO_CAT_MEME' : 'PASS',
+        swap_asset: isSpoiler
+          ? activeResult.swap_asset || {
+              asset_id: 'cat_meme_laptop_01',
+              type: 'local_cached_cat_meme',
+              caption: '스포일러 방어 완료! 대신 야근하는 부장 고양이 보고 가세요 😎'
+            }
+          : null
+      };
+      setActiveResult(updated);
+      setIsSwappedView(isSpoiler && !forceOriginal);
+      return;
+    }
+
     const base = evaluateShort(activeShort, { watchlist, threshold: nextVal });
     const updated = { ...base, ai_analysis: buildOnDeviceReasoning(base) };
     setActiveResult(updated);
@@ -568,7 +654,7 @@ export default function SpoilerSwapApp() {
               <h1 className="text-base font-extrabold tracking-tight text-white flex items-center gap-2">
                 Spoiler-Swap AI
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
-                  Next.js Full-Stack
+                  Next.js Full-Stack v2.3
                 </span>
               </h1>
               <p className="text-[11px] text-slate-400">
@@ -596,7 +682,7 @@ export default function SpoilerSwapApp() {
             >
               AI Stage 4:{' '}
               {apiCapabilities?.gemini_stage4
-                ? 'Gemini 2.0'
+                ? 'Gemini AI'
                 : apiCapabilities?.openai_stage4
                   ? 'GPT-4o-mini'
                   : '온디바이스 KG'}
@@ -1004,6 +1090,7 @@ export default function SpoilerSwapApp() {
           onExportMarkdown={handleExportMarkdown}
           onExportCsv={handleExportCsv}
           onClearLogs={() => {
+            lastRecordedResultByRunRef.current.clear();
             setLogs([]);
             setStats({ scanned: 0, blocked: 0, totalLatency: 0, carbonSaved: 0 });
             showToast('감사 로그가 초기화되었습니다.');

@@ -3,6 +3,9 @@ import { evaluateWithOptionalLlm } from '@/lib/ai-stage4';
 import { DEFAULT_THRESHOLD, DEFAULT_WATCHLIST } from '@/lib/constants';
 import { extractYouTubeVideoId, fetchYouTubeShortMetadata } from '@/lib/youtube';
 
+export const maxDuration = 30;
+export const dynamic = 'force-dynamic';
+
 export async function POST(req: NextRequest) {
   let body: Record<string, unknown> = {};
   try {

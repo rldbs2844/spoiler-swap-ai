@@ -3,6 +3,9 @@ import { DEFAULT_THRESHOLD, DEFAULT_WATCHLIST } from '@/lib/constants';
 import { buildOnDeviceReasoning, evaluateShort } from '@/lib/detector';
 import { searchYouTubeShorts } from '@/lib/youtube';
 
+export const maxDuration = 30;
+export const dynamic = 'force-dynamic';
+
 export async function POST(req: NextRequest) {
   let body: Record<string, unknown> = {};
   try {

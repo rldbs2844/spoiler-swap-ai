@@ -56,9 +56,10 @@ export interface SwapAssetOutput {
 }
 
 export interface AiAnalysis {
-  provider: 'gemini-2.5-flash' | 'gemini-2.0-flash' | 'gpt-4o-mini' | 'on-device-kg';
+  provider: string;
   reasoning: string;
   multimodal_used: boolean;
+  fallbackReason?: string;
 }
 
 export interface EvaluationResult {
@@ -83,6 +84,7 @@ export interface EvaluationResult {
 
 export interface ScanLogEntry {
   seq: number;
+  runId?: number;
   timestamp: string;
   isoTime: string;
   title: string;
