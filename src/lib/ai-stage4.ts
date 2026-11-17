@@ -4,7 +4,7 @@ import type { EvaluationResult, ShortItem } from './types';
 async function fetchThumbnailBase64(url?: string): Promise<{ mimeType: string; data: string } | null> {
   if (!url || !url.startsWith('http')) return null;
   try {
-    const resp = await fetch(url, { signal: AbortSignal.timeout(1800), cache: 'no-store' });
+    const resp = await fetch(url, { signal: AbortSignal.timeout(1500), cache: 'no-store' });
     if (!resp.ok) return null;
     const contentType = resp.headers.get('content-type') || 'image/jpeg';
     const buf = await resp.arrayBuffer();
@@ -15,25 +15,6 @@ async function fetchThumbnailBase64(url?: string): Promise<{ mimeType: string; d
     };
   } catch {
     return null;
-  }
-}
-
-function parseJsonResponse(rawText: string): { score?: number; reasoning?: string } | null {
-  const cleaned = (rawText || '')
-    .replace(/```json/gi, '')
-    .replace(/```/g, '')
-    .trim();
-  if (!cleaned) return null;
-  try {
-    return JSON.parse(cleaned);
-  } catch {
-    const match = cleaned.match(/\{[\s\S]*\}/);
-    if (!match) return null;
-    try {
-      return JSON.parse(match[0]);
-    } catch {
-      return null;
-    }
   }
 }
 
@@ -66,8 +47,6 @@ export async function evaluateWithOptionalLlm(
     `음성자막/STT(Stage3): ${shortItem.stt || ''}`
   ].join('\n');
 
-  let lastFailureReason = '';
-
   try {
     let parsed: { score?: number; reasoning?: string } | null = null;
     let provider: 'gemini-2.5-flash' | 'gemini-2.0-flash' | 'gpt-4o-mini' = 'gemini-2.5-flash';
@@ -86,88 +65,47 @@ export async function evaluateWithOptionalLlm(
         multimodalUsed = true;
       }
 
-      const fastPayload = JSON.stringify({
-        contents: [{ parts }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          thinkingConfig: { thinkingBudget: 0 }
-        }
-      });
-
-      const compatPayload = JSON.stringify({
+      const payload = JSON.stringify({
         contents: [{ parts }],
         generationConfig: { responseMimeType: 'application/json' }
       });
 
-      const endpoints: Array<{
-        url: string;
-        modelName: 'gemini-2.5-flash' | 'gemini-2.0-flash';
-        useHeader: boolean;
-        body: string;
-      }> = [
+      const endpoints: Array<{ url: string; modelName: 'gemini-2.5-flash' | 'gemini-2.0-flash' }> = [
         {
           url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
-          modelName: 'gemini-2.5-flash',
-          useHeader: true,
-          body: fastPayload
-        },
-        {
-          url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(geminiKey)}`,
-          modelName: 'gemini-2.5-flash',
-          useHeader: false,
-          body: fastPayload
+          modelName: 'gemini-2.5-flash'
         },
         {
           url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
-          modelName: 'gemini-2.0-flash',
-          useHeader: true,
-          body: compatPayload
+          modelName: 'gemini-2.0-flash'
         }
       ];
 
       if (geminiKey.startsWith('AQ.')) {
         endpoints.push({
           url: 'https://aiplatform.googleapis.com/v1beta1/publishers/google/models/gemini-2.5-flash:generateContent',
-          modelName: 'gemini-2.5-flash',
-          useHeader: true,
-          body: compatPayload
+          modelName: 'gemini-2.5-flash'
         });
       }
 
       for (const ep of endpoints) {
-        try {
-          const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-          if (ep.useHeader) headers['x-goog-api-key'] = geminiKey;
-
-          const resp = await fetch(ep.url, {
-            method: 'POST',
-            headers,
-            signal: AbortSignal.timeout(7000),
-            body: ep.body
-          });
-
-          if (resp.ok) {
-            const data = await resp.json();
-            const partList = (data?.candidates?.[0]?.content?.parts || []) as Array<{
-              text?: string;
-              thought?: boolean;
-            }>;
-            const rawText = partList
-              .filter((p) => !p.thought && typeof p.text === 'string')
-              .map((p) => p.text)
-              .join('\n');
-            const candidate = parseJsonResponse(rawText);
-            if (candidate && typeof candidate.score === 'number') {
-              parsed = candidate;
-              provider = ep.modelName;
-              break;
-            }
-            lastFailureReason = `${ep.modelName}: invalid JSON`;
-          } else {
-            lastFailureReason = `${ep.modelName}: HTTP ${resp.status}`;
+        const resp = await fetch(ep.url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': geminiKey
+          },
+          signal: AbortSignal.timeout(3500),
+          body: payload
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          if (raw) {
+            parsed = JSON.parse(raw);
+            provider = ep.modelName;
+            break;
           }
-        } catch (err) {
-          lastFailureReason = `${ep.modelName}: ${err instanceof Error ? err.name : 'fetch error'}`;
         }
       }
     } else if (openaiKey) {
@@ -178,7 +116,7 @@ export async function evaluateWithOptionalLlm(
           'Content-Type': 'application/json',
           Authorization: `Bearer ${openaiKey}`
         },
-        signal: AbortSignal.timeout(6500),
+        signal: AbortSignal.timeout(3500),
         body: JSON.stringify({
           model: 'gpt-4o-mini',
           messages: [{ role: 'user', content: prompt }],
@@ -188,9 +126,7 @@ export async function evaluateWithOptionalLlm(
       if (resp.ok) {
         const data = await resp.json();
         const raw = data?.choices?.[0]?.message?.content || '';
-        parsed = parseJsonResponse(raw);
-      } else {
-        lastFailureReason = `openai: HTTP ${resp.status}`;
+        parsed = JSON.parse(raw);
       }
     }
 
@@ -229,15 +165,12 @@ export async function evaluateWithOptionalLlm(
         }
       };
     }
-  } catch (err) {
-    lastFailureReason = err instanceof Error ? err.message : 'LLM error';
+  } catch {
+    // Transparent fallback to on-device 4-stage engine
   }
 
   return {
     ...baseResult,
-    ai_analysis: {
-      ...buildOnDeviceReasoning(baseResult),
-      ...(lastFailureReason ? { fallbackReason: lastFailureReason } : {})
-    }
+    ai_analysis: buildOnDeviceReasoning(baseResult)
   };
 }
