@@ -115,6 +115,11 @@ export default function StageBreakdown({ result, onCopyJson }: StageBreakdownPro
                   썸네일 이미지 분석 포함
                 </span>
               )}
+              {ai.fallbackReason && (
+                <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] mono">
+                  {ai.fallbackReason}
+                </span>
+              )}
             </span>
           </div>
           <p className="text-xs text-slate-200 leading-relaxed">{ai.reasoning}</p>

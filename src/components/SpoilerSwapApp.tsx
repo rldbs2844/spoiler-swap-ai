@@ -90,6 +90,7 @@ export default function SpoilerSwapApp() {
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeRunSeqRef = useRef(0);
 
   const activeShort: ShortItem = useMemo(() => {
     if (mode === 'search' && selectedSearchShort) return selectedSearchShort;
@@ -197,6 +198,7 @@ export default function SpoilerSwapApp() {
     ) => {
       clearPlaybackTimers();
       setIsScanningFlash(false);
+      const runSeq = ++activeRunSeqRef.current;
 
       const forced = overrideForceOriginal ?? forceOriginal;
       const baseLocal = evaluateShort(shortItem, { watchlist, threshold });
@@ -225,6 +227,7 @@ export default function SpoilerSwapApp() {
       }
 
       let apiResolvedResult: EvaluationResult = localResult;
+      let timerAlreadyFired = false;
       if (!precomputedResult) {
         fetch('/api/evaluate', {
           method: 'POST',
@@ -233,8 +236,13 @@ export default function SpoilerSwapApp() {
         })
           .then((r) => (r.ok ? r.json() : null))
           .then((data: EvaluationResult | null) => {
+            if (activeRunSeqRef.current !== runSeq) return;
             if (data && data.video_id === shortItem.id) {
               apiResolvedResult = data;
+              setActiveResult(data);
+              if (timerAlreadyFired && data.action === 'SWAP_TO_CAT_MEME' && !forced) {
+                setIsSwappedView(true);
+              }
             }
           })
           .catch(() => {});
@@ -256,6 +264,7 @@ export default function SpoilerSwapApp() {
 
       timersRef.current.push(
         setTimeout(() => {
+          timerAlreadyFired = true;
           const finalDecision = apiResolvedResult || localResult;
           setActiveResult(finalDecision);
           recordLog(shortItem, finalDecision);

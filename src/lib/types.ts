@@ -59,6 +59,7 @@ export interface AiAnalysis {
   provider: 'gemini-2.5-flash' | 'gemini-2.0-flash' | 'gpt-4o-mini' | 'on-device-kg';
   reasoning: string;
   multimodal_used: boolean;
+  fallbackReason?: string;
 }
 
 export interface EvaluationResult {
