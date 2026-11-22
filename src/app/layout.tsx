@@ -1,16 +1,20 @@
-import type { Metadata } from 'next';
-import './globals.css';
+import type { Metadata } from "next";
+import "./globals.css";
 
 export const metadata: Metadata = {
-  title: 'Spoiler-Swap AI — 실시간 숏폼 스포일러 감지 및 힐링 밈 교체 웹 앱',
+  title: "SpoilerGuard | 실시간 유튜브 스포일러 차단 플레이어",
   description:
-    '유튜브 쇼츠 URL 검사 및 4단계 멀티모달 파이프라인으로 스포일러를 사전 감지하고 고양이 힐링 밈으로 교체하는 Next.js 웹 애플리케이션'
+    "실제 유튜브 영상을 탐색하고 시청하는 동안 4단계 멀티모달 분석을 통해 기습 스포일러를 실시간으로 감지하고 가림막으로 차단합니다.",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
-    <html lang="ko">
-      <body className="min-h-screen antialiased selection:bg-indigo-500/30 selection:text-indigo-200">
+    <html lang="ko" className="h-full antialiased">
+      <body className="min-h-full flex flex-col bg-[#ffffff] text-[#0f172a]">
         {children}
       </body>
     </html>
