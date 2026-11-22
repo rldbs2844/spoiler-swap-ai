@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "SpoilerGuard | 실시간 유튜브 스포일러 차단 플레이어",
+  title: "나이트 러너 안전 코스 안내 | 야간 대기 역전층 분석",
   description:
-    "실제 유튜브 영상을 탐색하고 시청하는 동안 4단계 멀티모달 분석을 통해 기습 스포일러를 실시간으로 감지하고 가림막으로 차단합니다.",
+    "낮(14시)과 밤(22시) 초미세먼지(PM2.5) 비교를 통해 야간 대기 역전층 위험 구간을 판별하고 안전 러닝 코스를 안내합니다.",
 };
 
 export default function RootLayout({
@@ -14,7 +14,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko" className="h-full antialiased">
-      <body className="min-h-full flex flex-col bg-[#ffffff] text-[#0f172a]">
+      <body className="min-h-full flex flex-col bg-[#f8fafc] text-[#0f172a]">
         {children}
       </body>
     </html>
